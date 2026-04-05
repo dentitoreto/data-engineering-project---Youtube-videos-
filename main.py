@@ -1,0 +1,57 @@
+from airflow import DAG
+import pendulum
+from datetime import datetime, timedelta
+from api.video_stats import (
+    get_playlist_Id,
+    get_video_ids,
+    extract_video_data,
+    save_to_json,
+)
+from datawarehouse.dwh import staging_table, core_table
+
+local_tz = pendulum.timezone("Europe/Belgrade")
+
+default_args = {
+    "owner": "dataengineers",
+    "depends_on_past": False,
+    "email_on_failure": False,
+    "email_on_retry": False,
+    "email": "test@test.com",
+    # "retries" : 1,
+    # "retry_delay" : timedelta(minutes=5),
+    "max_active_runs": 1,
+    "dagrun_timeout": timedelta(hours=1),
+    "start_date": datetime(2026, 4, 4, tzinfo=local_tz),
+    # "end_date" : datetime(2026,12,31, tzinfo=local_tz),
+}
+
+with DAG(
+    dag_id="produce_json",
+    default_args=default_args,
+    description="DAG to produce json file with raw data from YT API",
+    schedule="0 14 * * *",
+    catchup=False,
+) as dag:
+    # define tasks
+    playlist_id = get_playlist_Id()
+    video_ids = get_video_ids(playlist_id)
+    extract_data = extract_video_data(video_ids)
+    save_to_json_task = save_to_json(extract_data)
+
+    # define dependencies between tasks
+    playlist_id >> video_ids >> extract_data >> save_to_json_task
+
+
+with DAG(
+    dag_id="update_database",
+    default_args=default_args,
+    description="DAG to insert data into staging and core table in Postgres from json file from YT API",
+    schedule="0 16 * * *",
+    catchup=False,
+) as dag:
+    # define tasks
+    update_staging = staging_table()
+    update_core = core_table()
+
+    # define dependencies between tasks
+    update_staging >> update_core
