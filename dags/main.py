@@ -7,6 +7,8 @@ from api.video_stats import (
     extract_video_data,
     save_to_json,
 )
+from datawarehouse.dwh import staging_table, core_table
+from dataquality.soda import yt_elt_data_quality
 
 local_tz = pendulum.timezone("Europe/Belgrade")
 
@@ -38,4 +40,34 @@ with DAG(
     save_to_json_task = save_to_json(extract_data)
 
     # define dependencies between tasks
-    playlist_id >> video_ids >> extract_data >> save_to_json_task 
+    playlist_id >> video_ids >> extract_data >> save_to_json_task
+
+
+with DAG(
+    dag_id="update_database",
+    default_args=default_args,
+    description="DAG to insert data into staging and core table in Postgres from json file from YT API",
+    schedule="0 16 * * *",
+    catchup=False,
+) as dag:
+    # define tasks
+    update_staging = staging_table()
+    update_core = core_table()
+
+    # define dependencies between tasks
+    update_staging >> update_core
+
+
+with DAG(
+    dag_id="run_data_quality",
+    default_args=default_args,
+    description="DAG to perform data quality tests using soda",
+    schedule="30 16 * * *",
+    catchup=False,
+) as dag:
+    # define tasks
+    soda_validate_staging = yt_elt_data_quality(schema="staging")
+    soda_validate_core = yt_elt_data_quality(schema="core")
+
+    # define dependencies between tasks
+    soda_validate_staging >> soda_validate_core
