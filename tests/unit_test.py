@@ -33,8 +33,8 @@ def test_dags_integrity(dagbag):
 
     # fourth subtest
     expected_task_count = {
-        "produce_json": 4,
-        "update_database": 2,
+        "produce_json": 5,
+        "update_database": 3,
         "run_data_quality": 2,
     }
     print("=============")
